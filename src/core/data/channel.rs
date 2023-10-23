@@ -7,7 +7,7 @@ pub struct Channel{
     id: String,
     #[serde(rename(deserialize = "type"))]
     channel_type: ChannelType,
-    flags: i32,
+    flags: Option<i32>,
     guild_id: String,
     name: String,
     parent_id: Option<String>,

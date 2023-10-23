@@ -1,14 +1,19 @@
+use std::io::Write;
 use std::sync::{Arc};
 use std::thread;
 use futures::{SinkExt, StreamExt, TryFutureExt};
-use tokio_tungstenite::{connect_async};
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::tungstenite::Error;
 use crate::core::json;
 use crate::core::data::wss_messages::ReceiveEvents;
 use crate::core::data::wss_messages::Payload;
 use std::time::{SystemTime, UNIX_EPOCH};
+use futures::stream::SplitSink;
+use serde_json::json;
+use tokio::net::TcpStream;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 
 pub async fn create_wss() -> Result<(), Error> {
@@ -26,10 +31,10 @@ pub async fn create_wss() -> Result<(), Error> {
 
     let handle = tokio::spawn(async move {
         println!("Thread on");
-        let mut heartbeat_handle;
+        let mut heartbeat_handle: Option<JoinHandle<()>> = None;
         let shared_write = Arc::new(Mutex::new(write));
 
-        let write = shared_write.clone();
+        let main_write = shared_write.clone();
         'outer: loop {
             let msg = read.next().await.expect("Error").unwrap();
 
@@ -37,53 +42,35 @@ pub async fn create_wss() -> Result<(), Error> {
                 Message::Close(msg) => {
                     println!("Cerrando conexión");
 
+                    if let Some(handle) = heartbeat_handle{
+                        handle.abort();
+                    }
                     break 'outer;
                 }
 
                 Message::Text(text) => {
-                    println!("{}", text);
-
                     let recived_json: Result<Payload, serde_json::Error> = json::parse_json_from_string(&text);
 
+                    if let Err(a) = recived_json {
+                        println!("WARNING: No se ha podido parsear el mensaje. {}", a);
+                        println!("{}", text);
+                        continue;
+                    }
 
-                    if let Ok(v) = recived_json {
-                        match v.d {
-                            ReceiveEvents::Hello { heartbeat_interval } => {
-                                let write = shared_write.clone();
-
-
-                                heartbeat_handle = tokio::spawn(async move {
-
-                                    println!("INFO: Starting HeatBeat Thread.");
-
-                                    let mut writer = write.lock().await;
-
-                                    let mut heartbeat = HeartBeat {
-                                        heartbeat_count: 0,
-                                        next_heartbeat: 0,
-                                        heartbeat_delay: 10000,
-                                    };
-
-                                    heartbeat.heartbeat_delay = heartbeat_interval;
-
-                                    println!("INFO: Sending heartbeat every {}ms", heartbeat.heartbeat_delay);
+                    let json = recived_json.unwrap();
+                    match json.d {
+                        ReceiveEvents::Hello { heartbeat_interval } => {
+                            hello_event(&mut heartbeat_handle,&shared_write, &main_write, heartbeat_interval).await;
 
 
-                                    loop {
-                                        let actual_millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+                            continue;
+                        }
 
-                                        if actual_millis >= heartbeat.next_heartbeat {
-                                            heartbeat.heartbeat_count += 1;
-                                            heartbeat.next_heartbeat = actual_millis + heartbeat.heartbeat_delay as u128;
-                                            writer.send(Message::Text(format!(r#"{{"op": 1,"d": {}}}"#, heartbeat.heartbeat_count))).await.expect("TODO: panic message");
-
-                                        };
-                                    }
-                                });
-
-                                continue
-
-                            }
+                        ReceiveEvents::Dispatch{ .. } => {
+                            println!("{:?}", json);
+                        }
+                        _ => {
+                            println!("Another Message Arrived: {:?}", json)
                         }
                     }
                 }
@@ -92,12 +79,74 @@ pub async fn create_wss() -> Result<(), Error> {
                 }
             }
         }
-
-
     });
 
 
     Ok(())
+}
+
+async fn hello_event(heartbeat_handle: &mut Option<JoinHandle<()>>, shared_write: &Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>, main_write: &Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>, heartbeat_interval: u16) {
+    let write = shared_write.clone();
+
+    *heartbeat_handle = Some(tokio::spawn(async move {
+        heartbeat_send_func(heartbeat_interval, write).await;
+    }));
+
+    send_identify_message(&main_write).await;
+}
+
+async fn send_identify_message(main_write: &Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>) {
+    let mut writer = main_write.lock().await;
+
+    let json_obj = json!({
+                                    "op": 2,
+                                    "d": {
+                                        "token": "MTE1OTU3OTMxMzc0MjU1NzMwNA.G7FBlu.fmOt-G47aLyC7TKOO7UAN4I2TSMLO8CCapWn_c",
+                                        "properties": {
+                                            "os": "linux",
+                                            "browser": "RustBotAPI",
+                                            "device": "RustBotAPI"
+                                        },
+                                        "intents": 33280
+                                    }
+                                });
+    writer.send(Message::Text(json_obj.to_string())).await.expect("TODO: panic message");
+
+    println!("INFO: Se ha enviado el mensaje de identificación.");
+}
+
+async fn heartbeat_send_func(heartbeat_interval: u16, write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>) {
+    println!("INFO: Starting HeartBeat Thread.");
+
+
+    let mut heartbeat = HeartBeat {
+        heartbeat_count: 0,
+        next_heartbeat: 0,
+        heartbeat_delay: 10000,
+    };
+
+    heartbeat.heartbeat_delay = heartbeat_interval;
+
+    let actual_millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+    heartbeat.next_heartbeat = actual_millis + heartbeat.heartbeat_delay as u128;
+
+
+    println!("INFO: Sending heartbeat every {}ms", heartbeat.heartbeat_delay);
+
+
+    loop {
+        let actual_millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+
+        if actual_millis >= heartbeat.next_heartbeat {
+            heartbeat.heartbeat_count += 1;
+            heartbeat.next_heartbeat = actual_millis + heartbeat.heartbeat_delay as u128;
+
+            println!("-");
+
+            let mut writer = write.lock().await;
+            writer.send(Message::Text(format!(r#"{{"op": 1,"d": {}}}"#, heartbeat.heartbeat_count))).await.expect("TODO: panic message");
+        };
+    }
 }
 
 #[derive(Debug)]

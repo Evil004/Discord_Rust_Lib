@@ -1,6 +1,10 @@
+use std::fmt::Error;
+use std::process::abort;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
-use crate::core::json::parse_json_from_value;
+use crate::core::data::message::DiscordMessage;
+use crate::core::data::wss_messages::ReceiveEvents::{Dispatch, HeartbeatACK};
+use crate::core::json::{parse_json_from_string, parse_json_from_value};
 
 #[derive(Debug)]
 pub struct Payload {
@@ -20,13 +24,26 @@ impl<'de> Deserialize<'de> for Payload {
             .ok_or_else(|| serde::de::Error::missing_field("op"))? as u16;
 
         let d = match op {
+            0 => {
+                let t = value.get("t").and_then(|t| t.as_str()).unwrap_or("");
+                let d_data = value
+                    .get("d")
+                    .ok_or_else(|| serde::de::Error::missing_field("d"))?;
+
+                println!("{}", t);
+                let dispatched_event = get_dispatched_event(t, d_data.clone()).unwrap();
+                ReceiveEvents::Dispatch { event: dispatched_event }
+            }
             10 => {
                 let d_data = value
                     .get("d")
                     .ok_or_else(|| serde::de::Error::missing_field("d"))?;
-                ReceiveEvents::Hello{
+                ReceiveEvents::Hello {
                     heartbeat_interval: d_data.get("heartbeat_interval").and_then(|v| v.as_u64()).unwrap() as u16,
                 }
+            }
+            11 =>{
+                ReceiveEvents::HeartbeatACK
             }
             _ => {
                 return Err(serde::de::Error::custom(format!("Unknown op: {}", op)));
@@ -40,21 +57,25 @@ impl<'de> Deserialize<'de> for Payload {
     }
 }
 
-fn deserialize_d_field<'de, D>(deserializer: D) -> Result<ReceiveEvents, D::Error>
-    where
-        D: Deserializer<'de>,
-{
-    let d: Value = Deserialize::deserialize(deserializer)?;
-    println!("{:?}", d);
-    let op: u16 = d["op"].as_u64().unwrap_or(0) as u16;
+fn get_dispatched_event(t: &str, d_data: Value) -> Option<DispatchedEvent> {
+    match t {
+        "MESSAGE_CREATE" => {
 
-    match op {
-        10 => {
-            Ok(parse_json_from_value::<ReceiveEvents>(d).unwrap())
+            let message = parse_json_from_value::<DiscordMessage>(d_data).expect("TODO: panic message");
+
+            return Some(DispatchedEvent::MessageCreate(
+                message
+            ));
         }
-        _ => Err(serde::de::Error::custom(format!("Unknown op: {}", op))),
+        "READY" => {
+           return  Some(DispatchedEvent::Dummy);
+        }
+        _ => {}
     }
+
+    return None;
 }
+
 
 struct Properties {
     os: String,
@@ -66,6 +87,7 @@ enum SendEvents {
     Identify {
         token: String,
         properties: Properties,
+        intents: u64,
     },
     Resume {
         token: String,
@@ -78,7 +100,17 @@ enum SendEvents {
 #[derive(Deserialize, Debug)]
 #[repr(u8)]
 pub enum ReceiveEvents {
+    Dispatch {
+        event: DispatchedEvent,
+    } = 0,
     Hello {
         heartbeat_interval: u16
     }= 10,
+    HeartbeatACK = 11,
+}
+
+#[derive(Deserialize, Debug)]
+pub enum DispatchedEvent {
+    MessageCreate(DiscordMessage),
+    Dummy,
 }
