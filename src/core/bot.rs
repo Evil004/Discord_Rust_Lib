@@ -1,45 +1,47 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use crate::core::handler::EventHandler;
 use crate::core::wss::start_socket;
 
-pub struct Bot {
-    token: String,
-    command_prefix: String,
-    event_handler: Option<Box<dyn EventHandler>>
+pub struct Client {
+    pub token: String,
+    event_handler: Option<Box<dyn EventHandler>>,
+    pub client_settings: ClientSettings
 }
 
-impl Bot {
+impl Client {
 
-    pub fn create(token: String, prefix: String) -> Bot {
+    pub fn create(token: String) -> Client {
 
-        let bot = Bot {
+        let client_settings = ClientSettings{
+            accept_from_bot: true,
+        };
+
+        let client = Client {
             token,
-            command_prefix: prefix,
             event_handler: None,
+            client_settings
         };
 
 
-        return bot;
+        return client;
     }
 
-    pub async fn start(&mut self)  {
+    pub async fn start(mut self)  {
         let event_handler = self.event_handler.take(); // Takes ownership temporarily
 
         if let None = event_handler{
             return;
         }
 
-        start_socket(&self, event_handler.unwrap()).await.expect("TODO: panic message");
+
+        start_socket(Arc::new(self),event_handler.unwrap()).await;
     }
 
     pub fn set_event_handler(&mut self, event_handler: Box<dyn EventHandler>){
-
         self.event_handler = Some(event_handler)
-
     }
-    
-  
-
 }
 
+pub struct ClientSettings{
+    pub accept_from_bot: bool
+}

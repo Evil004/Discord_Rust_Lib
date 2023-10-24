@@ -1,14 +1,33 @@
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use crate::core::data::message::DiscordMessage;
 use crate::core::json::{parse_json_from_value};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Payload {
-    op: u16,
-    pub d: ReceiveEvents,
+    pub(crate) op: u16,
+    pub d: PayloadData,
     s: Option<u16>,
     t: Option<String>,
+}
+
+impl Payload{
+    pub fn new(op: u16, d: PayloadData, s: Option<u16>, t: Option<String>)->Payload{
+        return Payload{
+            op,
+            d,
+            s,
+            t
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum PayloadData{
+    Send(SendEvents),
+    #[serde(skip)]
+    Receive(ReceiveEvents)
 }
 
 impl<'de> Deserialize<'de> for Payload {
@@ -28,18 +47,19 @@ impl<'de> Deserialize<'de> for Payload {
                     .ok_or_else(|| serde::de::Error::missing_field("d"))?;
 
                 let dispatched_event = get_dispatched_event(t, d_data.clone()).unwrap();
-                ReceiveEvents::Dispatch(dispatched_event)
+                PayloadData::Receive(ReceiveEvents::Dispatch(dispatched_event))
             }
             10 => {
                 let d_data = value
                     .get("d")
                     .ok_or_else(|| serde::de::Error::missing_field("d"))?;
-                ReceiveEvents::Hello {
+                let data = ReceiveEvents::Hello {
                     heartbeat_interval: d_data.get("heartbeat_interval").and_then(|v| v.as_u64()).unwrap() as u16,
-                }
+                };
+                PayloadData::Receive(data)
             }
             11 => {
-                ReceiveEvents::HeartbeatACK
+                PayloadData::Receive(ReceiveEvents::HeartbeatACK)
             }
             _ => {
                 return Err(serde::de::Error::custom(format!("Unknown op: {}", op)));
@@ -49,7 +69,8 @@ impl<'de> Deserialize<'de> for Payload {
         let s = value.get("s").and_then(|v| v.as_u64()).map(|s| s as u16);
         let t = value.get("t").and_then(|v| v.as_str()).map(|t| t.to_string());
 
-        Ok(Payload { op, d, s, t })
+
+        Ok(Payload { op, d , s, t })
     }
 }
 
@@ -72,13 +93,16 @@ fn get_dispatched_event(t: &str, d_data: Value) -> Option<DispatchedEvent> {
 }
 
 
-struct Properties {
-    os: String,
-    browser: String,
-    device: String,
+#[derive(Debug, Serialize)]
+pub struct Properties {
+    pub(crate) os: String,
+    pub(crate) browser: String,
+    pub(crate) device: String,
 }
 
-enum SendEvents {
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum SendEvents {
     Identify {
         token: String,
         properties: Properties,

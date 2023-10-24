@@ -1,8 +1,9 @@
-use serde::{Deserialize};
+use serde::{Deserialize, Serialize};
 use crate::core::data::channel::Channel;
 use crate::core::data::user::User;
 
 #[derive(Deserialize, Debug)]
+
 pub struct DiscordMessage {
     id: String,
     pub channel_id: String,
