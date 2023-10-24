@@ -1,10 +1,7 @@
-use std::fmt::Error;
-use std::process::abort;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use crate::core::data::message::DiscordMessage;
-use crate::core::data::wss_messages::ReceiveEvents::{Dispatch, HeartbeatACK};
-use crate::core::json::{parse_json_from_string, parse_json_from_value};
+use crate::core::json::{parse_json_from_value};
 
 #[derive(Debug)]
 pub struct Payload {
@@ -30,9 +27,8 @@ impl<'de> Deserialize<'de> for Payload {
                     .get("d")
                     .ok_or_else(|| serde::de::Error::missing_field("d"))?;
 
-                println!("{}", t);
                 let dispatched_event = get_dispatched_event(t, d_data.clone()).unwrap();
-                ReceiveEvents::Dispatch { event: dispatched_event }
+                ReceiveEvents::Dispatch(dispatched_event)
             }
             10 => {
                 let d_data = value
@@ -42,7 +38,7 @@ impl<'de> Deserialize<'de> for Payload {
                     heartbeat_interval: d_data.get("heartbeat_interval").and_then(|v| v.as_u64()).unwrap() as u16,
                 }
             }
-            11 =>{
+            11 => {
                 ReceiveEvents::HeartbeatACK
             }
             _ => {
@@ -60,7 +56,6 @@ impl<'de> Deserialize<'de> for Payload {
 fn get_dispatched_event(t: &str, d_data: Value) -> Option<DispatchedEvent> {
     match t {
         "MESSAGE_CREATE" => {
-
             let message = parse_json_from_value::<DiscordMessage>(d_data).expect("TODO: panic message");
 
             return Some(DispatchedEvent::MessageCreate(
@@ -68,7 +63,7 @@ fn get_dispatched_event(t: &str, d_data: Value) -> Option<DispatchedEvent> {
             ));
         }
         "READY" => {
-           return  Some(DispatchedEvent::Dummy);
+            return Some(DispatchedEvent::Ready);
         }
         _ => {}
     }
@@ -100,9 +95,9 @@ enum SendEvents {
 #[derive(Deserialize, Debug)]
 #[repr(u8)]
 pub enum ReceiveEvents {
-    Dispatch {
-        event: DispatchedEvent,
-    } = 0,
+    Dispatch(
+        DispatchedEvent,
+    ) = 0,
     Hello {
         heartbeat_interval: u16
     }= 10,
@@ -112,5 +107,6 @@ pub enum ReceiveEvents {
 #[derive(Deserialize, Debug)]
 pub enum DispatchedEvent {
     MessageCreate(DiscordMessage),
+    Ready,
     Dummy,
 }

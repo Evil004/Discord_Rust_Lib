@@ -1,15 +1,13 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use crate::core::data::channel::Channel;
 use crate::core::data::user::User;
 
 #[derive(Deserialize, Debug)]
 pub struct DiscordMessage {
     id: String,
-    channel_id: String,
-    author: Option<User>,
-    content: Option<String>,
+    pub channel_id: String,
+    pub author: Option<User>,
+    pub content: String,
     timestamp: String,
     edited_timestamp: Option<String>,
     tts: bool,

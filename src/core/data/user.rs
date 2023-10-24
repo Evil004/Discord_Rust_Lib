@@ -2,11 +2,11 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct User {
-    id: String,
+    pub id: String,
     username: String,
-    avatar: String,
+    avatar: Option<String>,
     discriminator: String,
-    global_name: String,
+    global_name: Option<String>,
     public_flags: Option<i32>,
     flags: Option<i32>,
     banner: Option<String>,
@@ -22,13 +22,13 @@ pub struct User {
     fn new(
         id: String,
         username: String,
-        avatar: String,
+        avatar: Option<String>,
         discriminator: String,
         public_flags: Option<i32>,
         flags: Option<i32>,
         banner: Option<String>,
         accent_color: Option<i32>,
-        global_name: String,
+        global_name: Option<String>,
         avatar_decoration_data: Option<String>,
         banner_color: Option<String>,
         mfa_enabled: Option<bool>,

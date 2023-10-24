@@ -1,38 +1,63 @@
-use std::thread;
-use std::time::Duration;
+use async_trait::async_trait;
 use reqwest;
-use dotenv::{dotenv, Error};
-use futures::SinkExt;
-use serde_json::{Result, Value};
-use tokio_tungstenite::tungstenite::Message;
+use dotenv::{dotenv, Error, var};
+use serde_json::{Result};
+use DiscordHM_API::core::bot::Bot;
 use DiscordHM_API::core::data::channel::Channel;
+use DiscordHM_API::core::data::message::DiscordMessage;
 use DiscordHM_API::core::data::user::User;
+use DiscordHM_API::core::handler::EventHandler;
 use DiscordHM_API::core::json;
 use DiscordHM_API::core::requests;
-use DiscordHM_API::core::wss::create_wss;
+
+struct Handler;
+
+#[async_trait]
+impl EventHandler for Handler{
+    async fn message(&self, message: &DiscordMessage) {
+
+
+        let channel = Channel::get_channel(&message.channel_id).await;
+        if message.content =="Ping" {
+
+            channel.send_message("Pong").await;
+        }
+    }
+
+    async fn ready(&self) {
+        println!("Bot listo")
+    }
+
+}
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Error> {
+
     dotenv().ok();
 
-    thread_ws().await;
+    let token = var("DISCORD_BOT_TOKEN")?;
+    let command_prefix = var("COMMAND_PREFIX")?;
+
+
+    let mut bot = Bot::create(token, command_prefix);
+
+    bot.set_event_handler(Box::new(Handler{}));
+    bot.start().await;
+
 
 
     Ok(())
 }
 
-async fn thread_ws() {
-    create_wss().await.expect("TODO: panic message");
-
-    for i in 0..10 {
-        tokio::time::sleep(Duration::new(10, 0)).await
-    }
+fn test(){
+    println!("AAAAH")
 }
 
 
 
+
 async fn test1() {
-    let b = requests::get("/channels/492375411309674510").await;
+    let b = requests::get_from_discord_api("/channels/492375411309674510").await;
 
     println!("{:?}", b);
 
@@ -53,7 +78,7 @@ async fn test1() {
     }
 
 
-    let b = requests::get("/applications/@me").await;
+    let b = requests::get_from_discord_api("/applications/@me").await;
 
     println!("{:?}", b);
 

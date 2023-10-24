@@ -1,12 +1,10 @@
-use std::io::Write;
 use std::sync::{Arc};
-use std::thread;
-use futures::{SinkExt, StreamExt, TryFutureExt};
+use futures::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::tungstenite::Error;
 use crate::core::json;
-use crate::core::data::wss_messages::ReceiveEvents;
+use crate::core::data::wss_messages::{DispatchedEvent, ReceiveEvents};
 use crate::core::data::wss_messages::Payload;
 use std::time::{SystemTime, UNIX_EPOCH};
 use futures::stream::SplitSink;
@@ -14,22 +12,24 @@ use serde_json::json;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use crate::core::bot::Bot;
+use crate::core::handler::EventHandler;
 
 
-pub async fn create_wss() -> Result<(), Error> {
+pub async fn start_socket(bot: & Bot, event_handler: Box<dyn EventHandler>) -> Result<(), Error> {
     let (ws_stream, _response) = connect_async(
         "wss://gateway.discord.gg",
     ).await?;
 
 
-    println!("Conexión establecida.");
 
-    let (mut write, mut read) = ws_stream.split();
+    let (write, mut read) = ws_stream.split();
+
+    let mut bot_container = Arc::new(Mutex::new(bot));
 
     // Lee mensajes del servidor.
 
-
-    let handle = tokio::spawn(async move {
+    tokio::spawn(async move {
         println!("Thread on");
         let mut heartbeat_handle: Option<JoinHandle<()>> = None;
         let shared_write = Arc::new(Mutex::new(write));
@@ -42,7 +42,7 @@ pub async fn create_wss() -> Result<(), Error> {
                 Message::Close(msg) => {
                     println!("Cerrando conexión");
 
-                    if let Some(handle) = heartbeat_handle{
+                    if let Some(handle) = heartbeat_handle {
                         handle.abort();
                     }
                     break 'outer;
@@ -58,16 +58,24 @@ pub async fn create_wss() -> Result<(), Error> {
                     }
 
                     let json = recived_json.unwrap();
+
                     match json.d {
+                        ReceiveEvents::HeartbeatACK =>{}
+
                         ReceiveEvents::Hello { heartbeat_interval } => {
-                            hello_event(&mut heartbeat_handle,&shared_write, &main_write, heartbeat_interval).await;
-
-
+                            hello_event(&mut heartbeat_handle, &shared_write, &main_write, heartbeat_interval).await;
                             continue;
                         }
 
-                        ReceiveEvents::Dispatch{ .. } => {
-                            println!("{:?}", json);
+                        ReceiveEvents::Dispatch(dispatched_event) => {
+                            if let DispatchedEvent::MessageCreate(message) = &dispatched_event{
+                                event_handler.message(message).await;
+                            }
+
+                            if let DispatchedEvent::Ready = &dispatched_event {
+                                event_handler.ready().await;
+                            }
+
                         }
                         _ => {
                             println!("Another Message Arrived: {:?}", json)
@@ -79,7 +87,7 @@ pub async fn create_wss() -> Result<(), Error> {
                 }
             }
         }
-    });
+    }).await.expect("AAAA");
 
 
     Ok(())
@@ -125,7 +133,7 @@ async fn heartbeat_send_func(heartbeat_interval: u16, write: Arc<Mutex<SplitSink
         heartbeat_delay: 10000,
     };
 
-    heartbeat.heartbeat_delay = heartbeat_interval;
+    heartbeat.heartbeat_delay = heartbeat_interval-1000;
 
     let actual_millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
     heartbeat.next_heartbeat = actual_millis + heartbeat.heartbeat_delay as u128;
@@ -140,8 +148,6 @@ async fn heartbeat_send_func(heartbeat_interval: u16, write: Arc<Mutex<SplitSink
         if actual_millis >= heartbeat.next_heartbeat {
             heartbeat.heartbeat_count += 1;
             heartbeat.next_heartbeat = actual_millis + heartbeat.heartbeat_delay as u128;
-
-            println!("-");
 
             let mut writer = write.lock().await;
             writer.send(Message::Text(format!(r#"{{"op": 1,"d": {}}}"#, heartbeat.heartbeat_count))).await.expect("TODO: panic message");

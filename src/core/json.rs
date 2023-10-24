@@ -1,4 +1,3 @@
-use std::error::Error;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::Value;
