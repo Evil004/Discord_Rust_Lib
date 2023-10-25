@@ -66,19 +66,21 @@ pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>
 
                     let json = recived_json.unwrap();
 
-                    let mut payloadData = None;
+                    let mut payload_data = None;
                     if let PayloadData::Receive(data) = &json.d {
-                        payloadData = Some(data);
+                        payload_data = Some(data);
                     }
 
-                    if let None = payloadData{
+                    if let None = payload_data {
                         continue
                     }
 
-                    let data = payloadData.unwrap();
+                    let data = payload_data.unwrap();
+
 
                     match data {
                         ReceiveEvents::Hello { heartbeat_interval } => {
+
                             hello_event(&mut heartbeat_handle, &shared_write, &main_write, *heartbeat_interval, bot_clone.clone()).await;
                         }
                         ReceiveEvents::Dispatch(event) => {
@@ -93,6 +95,9 @@ pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>
                                 DispatchedEvent::Ready => {
                                     event_handler.ready().await;
 
+                                }
+                                DispatchedEvent::PresenceUpdate {user,status,guild_id,}=> {
+                                    event_handler.status_update(user, String::from(guild_id), String::from(status), bot.as_ref()).await;
                                 }
                                 DispatchedEvent::Dummy => {}
                             }
@@ -121,7 +126,7 @@ async fn hello_event(heartbeat_handle: &mut Option<JoinHandle<()>>, shared_write
 async fn send_identify_message(main_write: &Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>, bot: &Client) {
     let mut writer = main_write.lock().await;
 
-    let payloadData = PayloadData::Send(
+    let payload_data = PayloadData::Send(
         SendEvents::Identify {
             token: bot.token.clone(),
             properties: Properties {
@@ -129,10 +134,10 @@ async fn send_identify_message(main_write: &Arc<Mutex<SplitSink<WebSocketStream<
                 browser: String::from("RustAPI"),
                 device: String::from("RustAPI"),
             },
-            intents: 33280,
+            intents: 33536,
         });
 
-    let payload = Payload::new(2, payloadData, None, None);
+    let payload = Payload::new(2, payload_data, None, None);
 
     let json_obj: String = serde_json::to_string(&payload).expect("No se ha podido serializar.");
 

@@ -14,6 +14,7 @@ impl Client {
 
         let client_settings = ClientSettings{
             accept_from_bot: true,
+            must_start_with_prefix: true
         };
 
         let client = Client {
@@ -40,8 +41,13 @@ impl Client {
     pub fn set_event_handler(&mut self, event_handler: Box<dyn EventHandler>){
         self.event_handler = Some(event_handler)
     }
+
+    pub fn set_settins(&mut self, settings: ClientSettings){
+        self.client_settings = settings;
+    }
 }
 
 pub struct ClientSettings{
-    pub accept_from_bot: bool
+    pub accept_from_bot: bool,
+    pub must_start_with_prefix: bool
 }

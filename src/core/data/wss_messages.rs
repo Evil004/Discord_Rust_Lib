@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use crate::core::data::message::DiscordMessage;
+use crate::core::data::user::User;
 use crate::core::json::{parse_json_from_value};
 
 #[derive(Debug, Serialize)]
@@ -86,6 +87,16 @@ fn get_dispatched_event(t: &str, d_data: Value) -> Option<DispatchedEvent> {
         "READY" => {
             return Some(DispatchedEvent::Ready);
         }
+        "PRESENCE_UPDATE" =>{
+            let user: User = parse_json_from_value(d_data.get("user").unwrap().clone()).unwrap();
+            let guild_id = d_data.get("guild_id").and_then(|id| id.as_str())?;
+            let status = d_data.get("status").and_then(|id| id.as_str())?;
+
+            return Some(DispatchedEvent::PresenceUpdate {user,
+                guild_id: String::from(guild_id),
+                status: String::from(status),
+            })
+        }
         _ => {}
     }
 
@@ -132,5 +143,10 @@ pub enum ReceiveEvents {
 pub enum DispatchedEvent {
     MessageCreate(DiscordMessage),
     Ready,
+    PresenceUpdate{
+        user: User,
+        guild_id: String,
+        status: String,
+    },
     Dummy,
 }
