@@ -5,7 +5,7 @@ use crate::core::wss::start_socket;
 pub struct Client {
     pub token: String,
     event_handler: Option<Box<dyn EventHandler>>,
-    pub client_settings: ClientSettings
+    pub client_settings: ClientSettings,
 }
 
 impl Client {

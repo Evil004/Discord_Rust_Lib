@@ -36,7 +36,6 @@ pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>
     // Lee mensajes del servidor.
 
     tokio::spawn(async move {
-        println!("Thread on");
         let mut heartbeat_handle: Option<JoinHandle<()>> = None;
         let shared_write = Arc::new(Mutex::new(write));
         let main_write = shared_write.clone();
@@ -96,8 +95,8 @@ pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>
                                     event_handler.ready().await;
 
                                 }
-                                DispatchedEvent::PresenceUpdate {user,status,guild_id,}=> {
-                                    event_handler.status_update(user, String::from(guild_id), String::from(status), bot.as_ref()).await;
+                                DispatchedEvent::PresenceUpdate(presence)=> {
+                                    event_handler.status_update(presence, bot.as_ref()).await;
                                 }
                                 DispatchedEvent::Dummy => {}
                             }

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use crate::core::data::message::DiscordMessage;
-use crate::core::data::user::User;
+use crate::core::data::user::{PresenceUpdate, User};
 use crate::core::json::{parse_json_from_value};
 
 #[derive(Debug, Serialize)]
@@ -47,7 +47,7 @@ impl<'de> Deserialize<'de> for Payload {
                     .get("d")
                     .ok_or_else(|| serde::de::Error::missing_field("d"))?;
 
-                let dispatched_event = get_dispatched_event(t, d_data.clone()).unwrap();
+                let dispatched_event = get_dispatched_event(t, d_data.clone());
                 PayloadData::Receive(ReceiveEvents::Dispatch(dispatched_event))
             }
             10 => {
@@ -75,32 +75,36 @@ impl<'de> Deserialize<'de> for Payload {
     }
 }
 
-fn get_dispatched_event(t: &str, d_data: Value) -> Option<DispatchedEvent> {
+fn get_dispatched_event(t: &str, d_data: Value) -> DispatchedEvent {
     match t {
         "MESSAGE_CREATE" => {
             let message = parse_json_from_value::<DiscordMessage>(d_data).expect("TODO: panic message");
 
-            return Some(DispatchedEvent::MessageCreate(
+            return DispatchedEvent::MessageCreate(
                 message
-            ));
+            );
         }
         "READY" => {
-            return Some(DispatchedEvent::Ready);
+            return DispatchedEvent::Ready;
         }
         "PRESENCE_UPDATE" =>{
             let user: User = parse_json_from_value(d_data.get("user").unwrap().clone()).unwrap();
-            let guild_id = d_data.get("guild_id").and_then(|id| id.as_str())?;
-            let status = d_data.get("status").and_then(|id| id.as_str())?;
+            let guild_id = d_data.get("guild_id").and_then(|id| id.as_str()).unwrap_or("");
+            let status = d_data.get("status").and_then(|id| id.as_str()).unwrap_or("");
 
-            return Some(DispatchedEvent::PresenceUpdate {user,
-                guild_id: String::from(guild_id),
-                status: String::from(status),
-            })
+
+            return DispatchedEvent::PresenceUpdate(
+                PresenceUpdate{
+                    user,
+                    guild_id: String::from(guild_id),
+                    status: String::from(status),
+                }
+            )
         }
         _ => {}
     }
 
-    return None;
+    return DispatchedEvent::Dummy;
 }
 
 
@@ -143,10 +147,6 @@ pub enum ReceiveEvents {
 pub enum DispatchedEvent {
     MessageCreate(DiscordMessage),
     Ready,
-    PresenceUpdate{
-        user: User,
-        guild_id: String,
-        status: String,
-    },
+    PresenceUpdate(PresenceUpdate),
     Dummy,
 }

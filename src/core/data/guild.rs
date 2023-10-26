@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use crate::core::bot::Client;
-use crate::core::http::get_from_discord_api;
+use crate::core::http::{delete_from_discord_api, get_from_discord_api};
 use crate::core::json;
 
 #[derive(Deserialize)]
@@ -48,7 +48,9 @@ struct Guild {
 
 impl Guild {
     pub async fn get_channel(id: &str, client: &Client) -> Guild {
-        let channel_data = get_from_discord_api(&format!("/guilds/{}", id), client).await.expect("Error");
+        let response  = get_from_discord_api(&format!("/guilds/{}", id), client).await;
+
+        let channel_data = response.text().await.unwrap();
 
         let channel: Guild = json::parse_json_from_string(&channel_data).expect("ERROR: Error parsing the guild Info");
 

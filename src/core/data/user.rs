@@ -1,9 +1,9 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use crate::core::bot::Client;
-use crate::core::http::get_from_discord_api;
+use crate::core::http::{delete_from_discord_api, get_from_discord_api};
 use crate::core::json;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct User {
     pub id: String,
     pub username: Option<String>,
@@ -26,11 +26,20 @@ pub struct User {
 
 impl User {
     pub async fn get_user(id: &str, client: &Client) -> User {
-        let channel_data = get_from_discord_api(&format!("/users/{}", id), client).await.expect("Error");
+        let response = get_from_discord_api(&format!("/users/{}", id), client).await;
+
+        let channel_data = response.text().await.unwrap();
 
         let channel: User = json::parse_json_from_string(&channel_data).expect("ERROR: Error parsing the guild Info");
 
         channel
     }
 
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PresenceUpdate {
+    pub user: User,
+    pub guild_id: String,
+    pub status: String,
 }
