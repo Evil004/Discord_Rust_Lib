@@ -15,7 +15,7 @@ use crate::core::bot::Client;
 use crate::core::handler::EventHandler;
 
 
-pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>) {
+pub async fn start_socket(client: Arc<Client>, event_handler: Box<dyn EventHandler>) {
     let conn = connect_async(
         "wss://gateway.discord.gg",
     ).await;
@@ -30,7 +30,7 @@ pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>
 
     let (write, mut read) = ws_stream.split();
 
-    let bot_clone = bot.clone(); // Clone the Bot reference
+    let bot_clone = client.clone(); // Clone the Bot reference
 
 
     // Lee mensajes del servidor.
@@ -86,19 +86,26 @@ pub async fn start_socket(bot: Arc<Client>, event_handler: Box<dyn EventHandler>
                             match event {
                                 DispatchedEvent::MessageCreate(message) => {
                                     let is_from_bot = message.author.as_ref().unwrap().bot.unwrap_or(false);
-                                    if is_from_bot && bot.client_settings.accept_from_bot {
+                                    if is_from_bot && client.client_settings.accept_from_bot {
                                         continue;
                                     }
-                                    event_handler.message(message, bot.as_ref()).await;
+                                    event_handler.message(message, client.as_ref()).await;
                                 }
                                 DispatchedEvent::Ready => {
                                     event_handler.ready().await;
-
                                 }
                                 DispatchedEvent::PresenceUpdate(presence)=> {
-                                    event_handler.status_update(presence, bot.as_ref()).await;
-                                }
-                                DispatchedEvent::Dummy => {}
+                                    event_handler.status_update(presence, client.as_ref()).await;
+                                },
+                                DispatchedEvent::GuildMemberAdd(guild_member) => {
+                                    event_handler.guild_member_add(guild_member, client.as_ref()).await;
+                                },
+                                DispatchedEvent::GuildMemberRemove{user, guild_id} => {
+                                    event_handler.guild_member_remove(user,guild_id,client.as_ref()).await;
+                                },
+                                DispatchedEvent::Dummy => {
+                                    println!("{}", text);
+                                },
                             }
                         }
                         ReceiveEvents::HeartbeatACK => {}
@@ -133,7 +140,7 @@ async fn send_identify_message(main_write: &Arc<Mutex<SplitSink<WebSocketStream<
                 browser: String::from("RustAPI"),
                 device: String::from("RustAPI"),
             },
-            intents: 33536,
+            intents: 33538,
         });
 
     let payload = Payload::new(2, payload_data, None, None);

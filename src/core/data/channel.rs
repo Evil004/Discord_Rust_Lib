@@ -4,6 +4,7 @@ use serde_json::{json, Map, Value};
 use serde_repr::{Serialize_repr, Deserialize_repr};
 use tokio_tungstenite::tungstenite::http::response;
 use crate::core::bot::Client;
+use crate::core::data::errors::APIRequestErrors;
 use crate::core::data::message::DiscordMessage;
 use crate::core::json;
 use crate::core::http::{delete_from_discord_api, get_from_discord_api, get_from_discord_api_with_body, post_to_discord_api};
@@ -73,12 +74,17 @@ impl Channel {
         Ok(messages)
     }
 
-    pub async fn bulk_delete(&self, num_of_messages: u8, client: &Client) -> Result<(), Error> {
+    pub async fn bulk_delete(&self, num_of_messages: u8, client: &Client) -> Result<(), APIRequestErrors> {
+
+        if num_of_messages <=1 || num_of_messages > 100{
+
+            return Err(APIRequestErrors::InvalidNumOfMsgs);
+        }
 
         let result = self.get_messages(num_of_messages, client).await;
 
         if let Err(_) = result {
-            return Err(Error)
+            return Err(APIRequestErrors::Generic)
         }
 
         let messages = result.unwrap();
@@ -93,11 +99,10 @@ impl Channel {
 
         let json = Value::Object(body);
 
-
         let response = post_to_discord_api(&format!("/channels/{}/messages/bulk-delete",self.id ),json,client).await;
 
         if !response.status().is_success(){
-            return Result::Err(Error);
+            return Result::Err(APIRequestErrors::HTTPError);
         }
 
         return Ok(());
