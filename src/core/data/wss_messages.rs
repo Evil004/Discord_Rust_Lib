@@ -1,7 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use crate::core::data::message::DiscordMessage;
-use crate::core::data::user::{PresenceUpdate, User};
+use crate::core::data::user::{GuildMember, PresenceUpdate, User};
 use crate::core::json::{parse_json_from_value};
 
 #[derive(Debug, Serialize)]
@@ -42,6 +42,7 @@ impl<'de> Deserialize<'de> for Payload {
 
         let d = match op {
             0 => {
+
                 let t = value.get("t").and_then(|t| t.as_str()).unwrap_or("");
                 let d_data = value
                     .get("d")
@@ -75,6 +76,7 @@ impl<'de> Deserialize<'de> for Payload {
     }
 }
 
+
 fn get_dispatched_event(t: &str, d_data: Value) -> DispatchedEvent {
     match t {
         "MESSAGE_CREATE" => {
@@ -100,11 +102,25 @@ fn get_dispatched_event(t: &str, d_data: Value) -> DispatchedEvent {
                     status: String::from(status),
                 }
             )
+        },
+        "GUILD_MEMBER_ADD" =>{
+            let guild_member: GuildMember = parse_json_from_value(d_data).unwrap();
+
+            return DispatchedEvent::GuildMemberAdd(guild_member)
         }
-        _ => {}
+        "GUILD_MEMBER_REMOVE" =>{
+            let user: User = parse_json_from_value(d_data.get("user").unwrap().clone()).unwrap();
+            let guild_id: String = parse_json_from_value(d_data.get("guild_id").unwrap().clone()).unwrap();
+
+
+            return DispatchedEvent::GuildMemberRemove {
+                user,
+                guild_id,
+            }
+        }
+        _ => DispatchedEvent::Dummy
     }
 
-    return DispatchedEvent::Dummy;
 }
 
 
@@ -145,8 +161,14 @@ pub enum ReceiveEvents {
 
 #[derive(Deserialize, Debug)]
 pub enum DispatchedEvent {
-    MessageCreate(DiscordMessage),
     Ready,
+    MessageCreate(DiscordMessage),
     PresenceUpdate(PresenceUpdate),
+    GuildMemberAdd(GuildMember),
+    GuildMemberRemove {
+        user: User,
+        guild_id: String,
+    },
     Dummy,
 }
+
