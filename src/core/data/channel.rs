@@ -37,36 +37,43 @@ pub enum ChannelType {
 }
 
 impl Channel {
-    pub async fn get_channel(id: &str, client: &Client) -> Channel {
+    pub async fn get_channel(id: &str, client: &Client) -> Result<Channel, APIRequestErrors> {
         let response = get_from_discord_api(&format!("/channels/{}", id), client).await;
 
         let channel_data = response.text().await.unwrap();
 
         let channel: Channel = json::parse_json_from_string(&channel_data).expect("ERROR: Error Obtaining the channel Info");
 
-        channel
+        Ok(channel)
     }
-    pub async fn send_message(&self, message: &str, client: &Client) {
-        let data = format!("{{\"content\":\"{}\"}}", message);
+    pub async fn send_message(&self, message: &str, client: &Client) -> Result<DiscordMessage, APIRequestErrors> {
+
 
         let mut content = serde_json::Map::new();
         content.insert(String::from("content"), Value::String(String::from(message)));
 
         let body = Value::Object(content);
+        let response = post_to_discord_api(&format!("/channels/{}/messages", self.id), body, client).await;
 
-        post_to_discord_api(&format!("/channels/{}/messages", self.id), body, client).await;
+
+        if  !response.status().is_success(){
+            return Err(APIRequestErrors::HTTPError);
+        }
+
+        let message: DiscordMessage = parse_json_from_string(&response.text().await.unwrap()).unwrap();
+        return Ok(message);
     }
 
     /*pub async fn get_message(&self, message_id: &str, client: &Client) -> String {
         let discord_message = get_from_discord_api(&format!("/channels/{}/messages/{}", self.id, message_id), client).await;
     }*/
 
-    async fn get_messages(&self, num_of_messages: u8, client: &Client) -> Result<Vec<DiscordMessage>, Error> {
+    async fn get_messages(&self, num_of_messages: u8, client: &Client) -> Result<Vec<DiscordMessage>, APIRequestErrors> {
 
         let response = get_from_discord_api(&format!("/channels/{}/messages?limit={}", self.id, num_of_messages),client).await;
 
         if !response.status().is_success(){
-            return Result::Err(Error);
+            return Result::Err(APIRequestErrors::HTTPError);
         }
 
         let messages: Vec<DiscordMessage> = parse_json_from_string(&response.text().await.unwrap()).expect("AA");
@@ -99,7 +106,9 @@ impl Channel {
 
         let json = Value::Object(body);
 
+
         let response = post_to_discord_api(&format!("/channels/{}/messages/bulk-delete",self.id ),json,client).await;
+
 
         if !response.status().is_success(){
             return Result::Err(APIRequestErrors::HTTPError);

@@ -89,19 +89,19 @@ pub async fn start_socket(client: Arc<Client>, event_handler: Box<dyn EventHandl
                                     if is_from_bot && client.client_settings.accept_from_bot {
                                         continue;
                                     }
-                                    event_handler.message(message, client.as_ref()).await;
+                                    event_handler.on_message(message, client.as_ref()).await;
                                 }
                                 DispatchedEvent::Ready => {
-                                    event_handler.ready().await;
+                                    event_handler.on_ready().await;
                                 }
                                 DispatchedEvent::PresenceUpdate(presence)=> {
                                     event_handler.status_update(presence, client.as_ref()).await;
                                 },
                                 DispatchedEvent::GuildMemberAdd(guild_member) => {
-                                    event_handler.guild_member_add(guild_member, client.as_ref()).await;
+                                    event_handler.on_guild_member_add(guild_member, client.as_ref()).await;
                                 },
                                 DispatchedEvent::GuildMemberRemove{user, guild_id} => {
-                                    event_handler.guild_member_remove(user,guild_id,client.as_ref()).await;
+                                    event_handler.on_guild_member_remove(user, guild_id, client.as_ref()).await;
                                 },
                                 DispatchedEvent::Dummy => {
                                     println!("{}", text);

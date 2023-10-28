@@ -57,5 +57,9 @@ impl Guild {
 
         channel
     }
+    
+    pub async fn get_emijis(&self){
+        
+    }
 
 }
