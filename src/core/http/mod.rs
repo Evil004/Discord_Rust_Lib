@@ -46,7 +46,7 @@ pub async fn delete_from_discord_api(endpoint: &str, client: &Client) -> Respons
 
 
 
-    let request = reqwest_client.request(reqwest::Method::POST, format!("https://discord.com/api{}", endpoint))
+    let request = reqwest_client.request(reqwest::Method::GET, format!("https://discord.com/api{}", endpoint))
         .header("Authorization", authorization_header);
 
 
