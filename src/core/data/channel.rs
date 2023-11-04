@@ -5,9 +5,9 @@ use serde_repr::{Serialize_repr, Deserialize_repr};
 use tokio_tungstenite::tungstenite::http::response;
 use crate::core::bot::Client;
 use crate::core::data::errors::APIRequestErrors;
-use crate::core::data::message::DiscordMessage;
+use crate::core::data::message::{DiscordMessage, DiscordMessageBuilder};
 use crate::core::json;
-use crate::core::http::{delete_from_discord_api, get_from_discord_api, get_from_discord_api_with_body, post_to_discord_api};
+use crate::core::http::{delete_from_discord_api, get_from_discord_api, get_from_discord_api_with_body, post_message_to_api, post_to_discord_api};
 use crate::core::json::parse_json_from_string;
 
 
@@ -46,14 +46,10 @@ impl Channel {
 
         Ok(channel)
     }
-    pub async fn send_message(&self, message: &str, client: &Client) -> Result<DiscordMessage, APIRequestErrors> {
+    pub async fn send_message(&self, message: DiscordMessageBuilder, client: &Client) -> Result<DiscordMessage, APIRequestErrors> {
 
 
-        let mut content = serde_json::Map::new();
-        content.insert(String::from("content"), Value::String(String::from(message)));
-
-        let body = Value::Object(content);
-        let response = post_to_discord_api(&format!("/channels/{}/messages", self.id), body, client).await;
+        let response = post_message_to_api(&format!("/channels/{}/messages", self.id), message, client).await;
 
 
         if  !response.status().is_success(){
@@ -107,7 +103,7 @@ impl Channel {
         let json = Value::Object(body);
 
 
-        let response = post_to_discord_api(&format!("/channels/{}/messages/bulk-delete",self.id ),json,client).await;
+        let response = post_to_discord_api(&format!("/channels/{}/messages/bulk-delete", self.id ), json, client).await;
 
 
         if !response.status().is_success(){

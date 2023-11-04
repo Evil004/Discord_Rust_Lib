@@ -1,3 +1,5 @@
+use std::fmt::format;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use crate::core::bot::Client;
 use crate::core::http::{delete_from_discord_api, get_from_discord_api};
@@ -28,11 +30,15 @@ impl User {
     pub async fn get_user(id: &str, client: &Client) -> User {
         let response = get_from_discord_api(&format!("/users/{}", id), client).await;
 
-        let channel_data = response.text().await.unwrap();
+        let user_data = response.text().await.unwrap();
 
-        let channel: User = json::parse_json_from_string(&channel_data).expect("ERROR: Error parsing the guild Info");
+        let channel: User = json::parse_json_from_string(&user_data).expect("ERROR: Error parsing the guild Info");
 
         channel
+    }
+
+    pub async fn get_avatar_url(&self) -> String {
+        format!("https://cdn.discordapp.com/avatars/{}/{}.webp", self.id, self.avatar.as_ref().unwrap())
     }
 }
 
@@ -59,3 +65,4 @@ pub struct GuildMember {
     pub permissions: Option<String>,
     pub communication_disabled_until: Option<String>,
 }
+
